@@ -1,0 +1,67 @@
+# Recalculate AUC for Table 5.9 – Focusing only on selected models and comparing performance
+
+selected_models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "Gradient Boosting": GradientBoostingClassifier(),
+    "DNN (MLPClassifier)": MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500)
+}
+
+# Prepare the results container
+table_5_9 = []
+
+# Compute AUCs for traditional vs. alternative datasets
+for model_name, model in selected_models.items():
+    # Traditional
+    X_trad = df_model[traditional_features]
+    y_trad = df_model["Creditworthy"]
+    X_train_t, X_test_t, y_train_t, y_test_t = train_test_split(X_trad, y_trad, test_size=0.2, stratify=y_trad, random_state=42)
+
+    # Alternative
+    X_alt = df_model[alternative_features]
+    y_alt = df_model["Creditworthy"]
+    X_train_a, X_test_a, y_train_a, y_test_a = train_test_split(X_alt, y_alt, test_size=0.2, stratify=y_alt, random_state=42)
+
+    # Build pipelines
+    def build_pipe(X_data, model):
+        num_cols = X_data.select_dtypes(include=["int64", "float64"]).columns.tolist()
+        cat_cols = X_data.select_dtypes(include=["object"]).columns.tolist()
+        numeric_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+        categorical_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ])
+        preprocessor = ColumnTransformer([
+            ("num", numeric_transformer, num_cols),
+            ("cat", categorical_transformer, cat_cols)
+        ])
+        return Pipeline([
+            ("preprocessor", preprocessor),
+            ("classifier", model)
+        ])
+
+    pipe_t = build_pipe(X_trad, model)
+    pipe_t.fit(X_train_t, y_train_t)
+    y_proba_t = pipe_t.predict_proba(X_test_t)[:, 1]
+    auc_trad = round(roc_auc_score(y_test_t, y_proba_t) * 100, 2)
+
+    pipe_a = build_pipe(X_alt, model)
+    pipe_a.fit(X_train_a, y_train_a)
+    y_proba_a = pipe_a.predict_proba(X_test_a)[:, 1]
+    auc_alt = round(roc_auc_score(y_test_a, y_proba_a) * 100, 2)
+
+    improvement = round(auc_alt - auc_trad, 2)
+
+    table_5_9.append({
+        "Model": model_name,
+        "AUC-ROC (Traditional Data)": auc_trad,
+        "AUC-ROC (Alternative Data)": auc_alt,
+        "Improvement (%)": improvement
+    })
+
+# Show final Table 5.9
+df_table_5_9 = pd.DataFrame(table_5_9)
+tools.display_dataframe_to_user(name="Table 5.9 - Comparative Model Performance", dataframe=df_table_5_9)
