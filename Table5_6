@@ -1,0 +1,72 @@
+# Simulate AUC-ROC (with and without fairness intervention) and bias reduction
+
+fairness_aware_results = []
+
+# Run AUC-ROC comparison for both original and fairness-balanced datasets
+for model_name, model in models.items():
+    # Original dataset
+    X_orig = df_model[alternative_features]
+    y_orig = df_model["Creditworthy"]
+
+    # Balanced (fairness mitigated) dataset
+    group_a = df_model[df_model["Demographic_Group"] == "Group A"]
+    group_b = df_model[df_model["Demographic_Group"] == "Group B"]
+    min_size = min(len(group_a), len(group_b))
+    group_a_balanced = resample(group_a, replace=False, n_samples=min_size, random_state=42)
+    group_b_balanced = resample(group_b, replace=False, n_samples=min_size, random_state=42)
+    df_bal = pd.concat([group_a_balanced, group_b_balanced])
+
+    X_bal = df_bal[alternative_features]
+    y_bal = df_bal["Creditworthy"]
+
+    # Define preprocessing per dataset
+    def build_pipe(X_data, model):
+        num_cols = X_data.select_dtypes(include=["int64", "float64"]).columns.tolist()
+        cat_cols = X_data.select_dtypes(include=["object"]).columns.tolist()
+
+        numeric_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+        categorical_transformer = Pipeline([
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ])
+        preprocessor = ColumnTransformer([
+            ("num", numeric_transformer, num_cols),
+            ("cat", categorical_transformer, cat_cols)
+        ])
+        return Pipeline([
+            ("preprocessor", preprocessor),
+            ("classifier", model)
+        ])
+
+    # Evaluate original
+    X_train, X_test, y_train, y_test = train_test_split(X_orig, y_orig, test_size=0.2, stratify=y_orig, random_state=42)
+    pipe_orig = build_pipe(X_orig, model)
+    pipe_orig.fit(X_train, y_train)
+    y_proba_orig = pipe_orig.predict_proba(X_test)[:, 1]
+    auc_orig = round(roc_auc_score(y_test, y_proba_orig) * 100, 2)
+
+    # Evaluate fairness-balanced
+    X_train_bal, X_test_bal, y_train_bal, y_test_bal = train_test_split(X_bal, y_bal, test_size=0.2, stratify=y_bal, random_state=42)
+    pipe_bal = build_pipe(X_bal, model)
+    pipe_bal.fit(X_train_bal, y_train_bal)
+    y_proba_bal = pipe_bal.predict_proba(X_test_bal)[:, 1]
+    auc_bal = round(roc_auc_score(y_test_bal, y_proba_bal) * 100, 2)
+
+    # Compute bias score reduction from previous table
+    bias_before = df_table_5_4b.loc[df_table_5_4b["Model"] == model_name, "Bias Score (Before)"].values[0]
+    bias_after = df_table_5_4b.loc[df_table_5_4b["Model"] == model_name, "Bias Score (After)"].values[0]
+    reduction = round(((bias_before - bias_after) / bias_before) * 100, 2) if bias_before > 0 else 0.0
+
+    fairness_aware_results.append({
+        "Model": model_name,
+        "AUC-ROC (without Fairness)": auc_orig,
+        "AUC-ROC (with Fairness)": auc_bal,
+        "Bias Reduction (%)": reduction
+    })
+
+# Display Table 5.6
+df_table_5_6 = pd.DataFrame(fairness_aware_results)
+tools.display_dataframe_to_user(name="Table 5.6 - Fairness-Aware Performance Comparison", dataframe=df_table_5_6)
