@@ -1,0 +1,48 @@
+# Simulate a bias mitigation step using reweighing: rebalance demographic group samples (Group A and Group B)
+
+# Reuse alternative dataset for bias as it's more biased (from Table 5.4)
+from sklearn.utils import resample
+
+# Placeholder to store results
+bias_mitigation_results = []
+
+# Loop over each model to simulate "before and after" fairness
+for model_name, model in models.items():
+    # Step 1: Prepare inputs
+    X = df_model[alternative_features]
+    y = df_model["Creditworthy"]
+    g = df_model["Demographic_Group"]
+
+    # Step 2: Calculate bias before mitigation
+    bias_before = compute_bias_score(X, y, g, model)
+
+    # Step 3: Apply naive bias mitigation by balancing group samples
+    df_temp = df_model[alternative_features + ["Creditworthy", "Demographic_Group"]].copy()
+    group_a = df_temp[df_temp["Demographic_Group"] == "Group A"]
+    group_b = df_temp[df_temp["Demographic_Group"] == "Group B"]
+
+    min_size = min(len(group_a), len(group_b))
+    group_a_balanced = resample(group_a, replace=False, n_samples=min_size, random_state=42)
+    group_b_balanced = resample(group_b, replace=False, n_samples=min_size, random_state=42)
+    df_balanced = pd.concat([group_a_balanced, group_b_balanced])
+
+    X_bal = df_balanced[alternative_features]
+    y_bal = df_balanced["Creditworthy"]
+    g_bal = df_balanced["Demographic_Group"]
+
+    # Step 4: Recompute bias score after mitigation
+    bias_after = compute_bias_score(X_bal, y_bal, g_bal, model)
+
+    # Step 5: Fairness improvement
+    improvement = round(((bias_before - bias_after) / bias_before) * 100, 2) if bias_before > 0 else 0.0
+
+    bias_mitigation_results.append({
+        "Model": model_name,
+        "Bias Score (Before)": round(bias_before, 3),
+        "Bias Score (After)": round(bias_after, 3),
+        "Fairness Improvement (%)": improvement
+    })
+
+# Display Table 5.4 Bias Mitigation Effect
+df_table_5_4b = pd.DataFrame(bias_mitigation_results)
+tools.display_dataframe_to_user(name="Table 5.4 - Bias Scores Before and After Mitigation", dataframe=df_table_5_4b)
