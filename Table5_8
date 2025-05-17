@@ -1,0 +1,32 @@
+# Re-run the updated LIME explanation using the new applicant values and impacts
+
+import pandas as pd
+import ace_tools as tools
+
+# Updated LIME explanation case
+lime_case = [
+    {
+        "Feature": "Payment History (Last 12 Months)",
+        "Value (Applicant)": "3 late Payments",
+        "Model Impact": "Negative"
+    },
+    {
+        "Feature": "Digital Footprint Score",
+        "Value (Applicant)": "85",
+        "Model Impact": "Positive "
+    },
+    {
+        "Feature": "Credit Utilization Ratio",
+        "Value (Applicant)": "65%",
+        "Model Impact": "Negative"
+    },
+    {
+        "Feature": "Loan Default History",
+        "Value (Applicant)": "Yes",
+        "Model Impact": "Strong Negative"
+    }
+]
+
+# Create DataFrame
+df_table_5_8 = pd.DataFrame(lime_case)
+tools.display_dataframe_to_user(name="Table 5.8 - LIME Explanation for Rejection", dataframe=df_table_5_8)
