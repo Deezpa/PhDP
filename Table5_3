@@ -1,0 +1,59 @@
+# Split features into traditional vs alternative sets
+traditional_features = ["Age", "Employment_Status", "Residential_Stability", "Bank_Account_Tenure"]
+alternative_features = [
+    "Utility_Payment_History", "Rent_Payment_History", "Telecommunications_Payment_History",
+    "Educational_Background", "Online_Shopping_Behavior", "Social_Media_Footprint",
+    "Gig_Economy_Participation"
+]
+
+# Prepare results storage for Table 5.3
+table_5_3 = []
+
+# Evaluate each model on both traditional and alternative datasets
+for feature_set, label in [(traditional_features, "Traditional"), (alternative_features, "Alternative")]:
+    X_fs = df_model[feature_set]
+    y_fs = df_model["Creditworthy"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_fs, y_fs, test_size=0.2, stratify=y_fs, random_state=42
+    )
+
+    for name, model in models.items():
+        # Redefine preprocessor per feature set
+        numeric_cols = X_fs.select_dtypes(include=["int64", "float64"]).columns.tolist()
+        categorical_cols = X_fs.select_dtypes(include=["object"]).columns.tolist()
+
+        numeric_transformer = Pipeline(steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler())
+        ])
+
+        categorical_transformer = Pipeline(steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore"))
+        ])
+
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ("num", numeric_transformer, numeric_cols),
+                ("cat", categorical_transformer, categorical_cols)
+            ]
+        )
+
+        pipe = Pipeline(steps=[
+            ("preprocessor", preprocessor),
+            ("classifier", model)
+        ])
+        pipe.fit(X_train, y_train)
+        y_proba = pipe.predict_proba(X_test)[:, 1]
+        auc = round(roc_auc_score(y_test, y_proba) * 100, 2)
+
+        table_5_3.append({
+            "Model": name,
+            "Feature Set": label,
+            "AUC-ROC Score (%)": auc
+        })
+
+# Convert to DataFrame
+df_table_5_3 = pd.DataFrame(table_5_3)
+tools.display_dataframe_to_user(name="Table 5.3 - AUC-ROC with Traditional vs Alternative Features", dataframe=df_table_5_3)
