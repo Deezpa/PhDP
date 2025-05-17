@@ -1,0 +1,82 @@
+# Re-import necessary modules for ML model training
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.neural_network import MLPClassifier
+import numpy as np
+
+# Prepare features and label
+X = df_model.drop(columns=["Creditworthy"])
+y = df_model["Creditworthy"]
+
+# Preprocessing pipeline
+numeric_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+
+categorical_transformer = Pipeline(steps=[
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    ("onehot", OneHotEncoder(handle_unknown="ignore"))
+])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("num", numeric_transformer, numerical_cols),
+        ("cat", categorical_transformer, categorical_cols)
+    ]
+)
+
+# Model list
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Decision Tree": DecisionTreeClassifier(),
+    "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
+    "Gradient Boosting": GradientBoostingClassifier(),
+    "Support Vector Machine": SVC(probability=True),
+    "DNN (MLPClassifier)": MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500)
+}
+
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=42
+)
+
+# Prepare results storage
+table_roc = []
+table_metrics = []
+
+# Evaluate each model
+for name, model in models.items():
+    pipe = Pipeline(steps=[
+        ("preprocessor", preprocessor),
+        ("classifier", model)
+    ])
+    pipe.fit(X_train, y_train)
+    y_pred = pipe.predict(X_test)
+    y_proba = pipe.predict_proba(X_test)[:, 1]
+
+    table_roc.append({
+        "Model": name,
+        "AUC-ROC Score (%)": round(roc_auc_score(y_test, y_proba) * 100, 2)
+    })
+
+    table_metrics.append({
+        "Model": name,
+        "Precision": round(precision_score(y_test, y_pred), 2),
+        "Recall": round(recall_score(y_test, y_pred), 2),
+        "F1 Score": round(f1_score(y_test, y_pred), 2)
+    })
+
+df_table_5_1 = pd.DataFrame(table_roc)
+df_table_5_2 = pd.DataFrame(table_metrics)
+
+import ace_tools as tools; tools.display_dataframe_to_user(name="Table 5.1 - AUC-ROC Scores", dataframe=df_table_5_1)
+tools.display_dataframe_to_user(name="Table 5.2 - Precision, Recall, F1-Score", dataframe=df_table_5_2)
